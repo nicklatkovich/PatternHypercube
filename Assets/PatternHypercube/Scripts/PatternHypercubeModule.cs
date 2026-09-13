@@ -17,6 +17,7 @@ public class PatternHypercubeModule : ModuleScript {
 		"\"!{0} next\" or \"!{0} prev\" - change hyperface/pattern",
 		"\"!{0} XY\" - rotate hypercube/hyperface",
 		"\"!{0} submit\" - place pattern on selected hyperface",
+		"All of the specified commands can be chained via spaces."
 	}.Join(" | ");
 
 	public Transform HypercubeContainer;
@@ -103,38 +104,59 @@ public class PatternHypercubeModule : ModuleScript {
 
 	public IEnumerator ProcessTwitchCommand(string command) {
 		command = command.Trim().ToLower();
-		if (command == "3d") {
-			yield return null;
-			if (!_4dMode) yield return "sendtochat {0}, !{1} already in 3D mode";
-			else yield return new[] { _3dModeButton.Selectable };
-			yield break;
+		string[] cmdSplit = command.Trim().ToLower().Split();
+		bool simulated4DMode = _4dMode;
+		List<ButtonComponent> btnsSelectable = new List<ButtonComponent>();
+		for (int x = 0; x < cmdSplit.Length; x++) {
+			string curCmdPart = cmdSplit[x];
+			if (Regex.IsMatch(curCmdPart, @"^[xyzw]{2}$") && curCmdPart[0] != curCmdPart[1]) {
+				if (!simulated4DMode && curCmdPart.Contains('w')) {
+					yield return string.Format("sendtochaterror {0}, !{1} unable to use rotation over \"W\" in 3D mode after processing {2} command(s)", "{0}", "{1}", x);
+					yield break;
+				}
+				btnsSelectable.Add(_rotationButtons[0][AXIS_TO_INDEX[curCmdPart[0]]]);
+				btnsSelectable.Add(_rotationButtons[1][AXIS_TO_INDEX[curCmdPart[1]]]);
+			} else {
+				switch (curCmdPart) {
+					case "3d":
+						if (!simulated4DMode) {
+							yield return string.Format("sendtochaterror {0}, !{1} would already be in 3D mode after processing {2} command(s)", "{0}", "{1}", x);
+							yield break;
+						}
+						btnsSelectable.Add(_3dModeButton);
+						simulated4DMode = false;
+						break;
+					case "4d":
+						if (simulated4DMode) {
+							yield return string.Format("sendtochaterror {0}, !{1} would already be in 4D mode after processing {2} command(s)", "{0}", "{1}", x);
+							yield break;
+						}
+						btnsSelectable.Add(_4dModeButton);
+						simulated4DMode = true;
+						break;
+					case "next":
+					case "r":
+					case "right":
+						btnsSelectable.Add(_nextButton);
+						break;
+					case "prev":
+					case "l":
+					case "left":
+						btnsSelectable.Add(_prevButton);
+						break;
+					case "submit":
+						btnsSelectable.Add(_submitButton);
+						break;
+					default:
+						yield break;
+				}
+			}
 		}
-		if (command == "4d") {
+		for (int x = 0; x < btnsSelectable.Count; x++) {
+			ButtonComponent btn = btnsSelectable[x];
 			yield return null;
-			if (_4dMode) yield return "sendtochat {0}, !{1} already in 4D mode";
-			else yield return new[] { _4dModeButton.Selectable };
-			yield break;
-		}
-		if (command == "next" || command == "r" || command == "right") {
-			yield return null;
-			yield return new[] { _nextButton.Selectable };
-			yield break;
-		}
-		if (command == "prev" || command == "l" || command == "left") {
-			yield return null;
-			yield return new[] { _prevButton.Selectable };
-			yield break;
-		}
-		if (command == "submit") {
-			yield return null;
-			yield return new[] { _submitButton.Selectable };
-			yield break;
-		}
-		if (Regex.IsMatch(command, @"^[xyzw]{2}$") && command[0] != command[1]) {
-			yield return null;
-			if (!_4dMode && (command[0] == 'w' || command[1] == 'w')) yield return "sendtochat {0}, !{1} unable to use rotation over \"W\" in 3D mode";
-			else yield return new[] { _rotationButtons[0][AXIS_TO_INDEX[command[0]]].Selectable, _rotationButtons[1][AXIS_TO_INDEX[command[1]]].Selectable };
-			yield break;
+			btn.Selectable.OnInteract();
+			while (_animation) yield return string.Format("trycancel Command process was canceled after {0} press(es).", x + 1);
 		}
 	}
 
